@@ -105,6 +105,35 @@ class TestGaussianMI(unittest.TestCase):
 
         self.assertAlmostEqual(mi_true, mi_est, places=4,
             msg=f"Expected MI ≈ {mi_true:.4f}, got {mi_est:.4f}")
+        
+    def test_high_dimensional_mi(self):
+        """
+        Test compute_mi and compute_mi_cov on high-dimensional data (e.g., 50D).
+        """
+        dim = 50
+        samples = self.n_samples
+
+        # Create a joint covariance matrix for [X; Y] where X, Y ∈ ℝ^50
+        rho = 0.5
+        cov_xy = rho * np.eye(dim)
+        cov_x = np.eye(dim)
+        cov_y = np.eye(dim)
+        cov_joint = np.block([
+            [cov_x, cov_xy],
+            [cov_xy.T, cov_y]
+        ])
+        mean = np.zeros(2 * dim)
+
+        # Sample from joint Gaussian
+        full = self.rng.multivariate_normal(mean, cov_joint, size=samples)
+        X = full[:, :dim]
+        Y = full[:, dim:]
+
+        mi_est = self.mi_calc.compute_mi(X, Y)
+        mi_true = self.mi_calc.compute_mi_cov(cov_x, cov_y, cov_joint)
+
+        self.assertAlmostEqual(mi_true, mi_est, delta=0.2,
+            msg=f"Expected high-dim MI ≈ {mi_true:.4f}, got {mi_est:.4f}")
 
 if __name__ == '__main__':
     unittest.main()
