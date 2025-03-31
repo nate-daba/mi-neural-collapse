@@ -51,10 +51,60 @@ class TestGaussianMI(unittest.TestCase):
 
         mi_true = -0.5 * np.log(1 - rho**2)
         mi_est = self.mi_calc.compute_mi_cov(cov_x, cov_y, cov_joint)
-        print('mi_true', mi_true)
-        print('mi_test', mi_est)
         self.assertAlmostEqual(mi_true, mi_est, places=4,
             msg=f"Expected MI ≈ {mi_true:.4f}, but got {mi_est:.4f}")
+        
+    def test_independent_gaussian(self):
+        """
+        Mutual information of independent Gaussians (rho = 0) should be near zero.
+        """
+        rho = 0.0
+        cov_joint = np.array([[1.0, rho],
+                            [rho, 1.0]])
+        cov_x = np.array([[1.0]])
+        cov_y = np.array([[1.0]])
+
+        mi_true = 0.0
+        mi_est = self.mi_calc.compute_mi_cov(cov_x, cov_y, cov_joint)
+
+        self.assertAlmostEqual(mi_true, mi_est, places=5,
+            msg=f"Expected MI ≈ 0.0 for rho=0, but got {mi_est:.5f}")
+        
+    def test_perfect_correlation(self):
+        """
+        Test that MI blows up (approaches infinity) as rho → ±1.
+        """
+        rho = 0.9999  # Not exactly 1.0 to avoid singular matrix
+        cov_joint = np.array([[1.0, rho],
+                            [rho, 1.0]])
+        cov_x = np.array([[1.0]])
+        cov_y = np.array([[1.0]])
+
+        mi_est = self.mi_calc.compute_mi_cov(cov_x, cov_y, cov_joint)
+
+        self.assertGreater(mi_est, 4.0,  # MI should be very large
+            msg=f"Expected MI > 4.0 for rho=0.9999, but got {mi_est:.4f}")
+        
+    def test_marginal_variance_change(self):
+        """
+        MI should remain the same if rho is the same, even if variances differ.
+        """
+        rho = 0.5
+        var_x = 2.0
+        var_y = 5.0
+
+        cov_joint = np.array([
+            [var_x, rho * np.sqrt(var_x * var_y)],
+            [rho * np.sqrt(var_x * var_y), var_y]
+        ])
+        cov_x = np.array([[var_x]])
+        cov_y = np.array([[var_y]])
+
+        mi_true = -0.5 * np.log(1 - rho**2)
+        mi_est = self.mi_calc.compute_mi_cov(cov_x, cov_y, cov_joint)
+
+        self.assertAlmostEqual(mi_true, mi_est, places=4,
+            msg=f"Expected MI ≈ {mi_true:.4f}, got {mi_est:.4f}")
 
 if __name__ == '__main__':
     unittest.main()
