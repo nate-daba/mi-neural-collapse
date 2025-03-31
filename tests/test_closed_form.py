@@ -3,6 +3,7 @@
 import unittest
 import numpy as np
 from src.mi.closed_form import GaussianMI
+from numpy.typing import NDArray
 
 class TestGaussianMI(unittest.TestCase):
     """
@@ -134,6 +135,49 @@ class TestGaussianMI(unittest.TestCase):
 
         self.assertAlmostEqual(mi_true, mi_est, delta=0.2,
             msg=f"Expected high-dim MI ≈ {mi_true:.4f}, got {mi_est:.4f}")
+        
+    def test_mi_bounds_gaussian(self):
+        """
+        Validates that MI(X; Y) lies within the theoretical bounds:
+            0 ≤ I(X; Y) ≤ min(H(X), H(Y))
+        for jointly Gaussian X and Y.
+        """
+        dim = 20
+        rho = 0.7
+        samples = self.n_samples
+
+        # Build joint covariance matrix for [X; Y]
+        cov_xy = rho * np.eye(dim)
+        cov_x = np.eye(dim)
+        cov_y = np.eye(dim)
+        cov_joint = np.block([
+            [cov_x, cov_xy],
+            [cov_xy.T, cov_y]
+        ])
+        mean = np.zeros(2 * dim)
+
+        # Generate samples
+        full = self.rng.multivariate_normal(mean, cov_joint, size=samples)
+        X = full[:, :dim]
+        Y = full[:, dim:]
+
+        # Compute MI
+        mi_calc = self.mi_calc
+        mi = mi_calc.compute_mi(X, Y)
+
+        # Compute marginal entropies (in nats)
+        def entropy_gaussian(cov: NDArray) -> float:
+            d = cov.shape[0]
+            det = np.linalg.det(cov + 1e-5 * np.eye(d))  # regularize
+            return 0.5 * np.log((2 * np.pi * np.e) ** d * det)
+
+        h_x = entropy_gaussian(cov_x)
+        h_y = entropy_gaussian(cov_y)
+
+        # Check MI bounds
+        self.assertGreaterEqual(mi, 0.0, "MI must be ≥ 0")
+        self.assertLessEqual(mi, min(h_x, h_y), 
+            f"MI ({mi:.4f}) exceeds min(H(X), H(Y)) = {min(h_x, h_y):.4f}")
 
 if __name__ == '__main__':
     unittest.main()
