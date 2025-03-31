@@ -4,3 +4,5 @@ __pycache__/
 .env
 data/
 results/
+.DS_Store
+notebooks
