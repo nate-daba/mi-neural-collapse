@@ -1,43 +1,42 @@
-import h5py
+from torchvision.datasets import CIFAR10
 import numpy as np
 from typing import Dict
-from numpy.typing import NDArray
+from PIL import Image
 
-def load_cifar10_features(mat_path: str) -> Dict[int, Dict[str, NDArray]]:
+def load_cifar10(
+    root: str = "../../data",
+    train: bool = True
+) -> Dict[int, np.ndarray]:
     """
-    Loads class-wise train/test features saved in MATLAB v7.3 format using h5py.
+    Loads CIFAR-10 as raw numpy arrays grouped by class.
 
     Args:
-        mat_path: Path to .mat file saved with -v7.3
+        root: Path to store/download CIFAR-10
+        train: Whether to load training data (True) or test data (False)
 
     Returns:
-        Dictionary: {class_idx: {'train': array, 'test': array}}
+        A dictionary mapping class_index (0–9) to an array of shape (N, 3072),
+        where N is the number of samples in that class.
     """
-    classwise_data = {}
+    dataset = CIFAR10(root=root, train=train, download=True)
 
-    with h5py.File(mat_path, "r") as f:
-        allFTrain = f["allFTrain"]
-        allFTest = f["allFTest"]
-        num_classes = allFTrain.shape[0]
+    classwise_data: Dict[int, list[np.ndarray]] = {i: [] for i in range(10)}
 
-        for i in range(num_classes):
-            # MATLAB 1-based indexing and column-major memory layout
-            train_ref = allFTrain[i][0]
-            test_ref = allFTest[i][0]
+    for img, label in dataset:
+        # Convert PIL to numpy array and flatten to 1D (3072,)
+        img_np = np.array(img).astype(np.float32).reshape(-1)  # (3072,)
+        classwise_data[label].append(img_np)
 
-            fTrain = np.array(f[train_ref]).T
-            fTest = np.array(f[test_ref]).T
-
-            classwise_data[i] = {
-                "train": fTrain,
-                "test": fTest,
-            }
+    # Convert lists to stacked arrays
+    for cls in classwise_data:
+        classwise_data[cls] = np.stack(classwise_data[cls], axis=0)  # (N, 3072)
 
     return classwise_data
 
 if __name__ == "__main__":
-    data_path = "/Users/natnaeldaba/Documents/Documents/Academia/UofA/Research/neural_collapse/data/cifar10_pca_features.mat"
-    data = load_cifar10_features(data_path)
-    print(f"Loaded {len(data)} classes.")
-    for k, v in data.items():
-        print(f"Class {k}: train shape {v['train'].shape}, test shape {v['test'].shape}")
+    classwise_train = load_cifar10(root="../../data", train=False)
+
+    print(f"Loaded {len(classwise_train)} classes.")
+    for cls, data in classwise_train.items():
+        print(f"Class {cls}: shape = {data.shape}")
+
