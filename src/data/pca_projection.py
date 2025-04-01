@@ -1,18 +1,18 @@
 import numpy as np
 from typing import Dict, Tuple
 from numpy.typing import NDArray
-from dataloader import load_cifar10
+from .dataloader import load_cifar10
 from tqdm import tqdm
 
 class CIFAR10EigenProjector:
-    def __init__(self, k: int = 1000):
+    def __init__(self, num_eigv: int = 1000):
         """
         Initializes the eigen projector.
 
         Args:
             k: Number of top eigenvectors to retain per class.
         """
-        self.k = k
+        self.num_eigv = num_eigv
 
     def project_classwise(self, classwise_data: Dict[int, NDArray]) -> Dict[int, NDArray]:
         """
@@ -36,7 +36,7 @@ class CIFAR10EigenProjector:
             eigvals, eigvecs = np.linalg.eigh(cov)
             
             # Top-k eigenvectors (last k columns)
-            top_k_vecs = eigvecs[:, -self.k:]  # shape: (3072, k)
+            top_k_vecs = eigvecs[:, -self.num_eigv:]  # shape: (3072, k)
 
             # Project onto top-k
             proj = centered @ top_k_vecs  # (N, k)
@@ -58,7 +58,7 @@ class CIFAR10EigenProjector:
         X_centered = X - mean
         cov = np.cov(X_centered, rowvar=False)
         eigvals, eigvecs = np.linalg.eigh(cov)
-        top_k = eigvecs[:, -self.k:]
+        top_k = eigvecs[:, -self.num_eigv:]
         X_proj = X_centered @ top_k
         return X_proj, top_k, mean
 
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     classwise_split = {}
 
     
-    for cls in tqdm(train_data, desc=f"Projecting train and test data (k={projector.k})"):
+    for cls in tqdm(train_data, desc=f"Projecting train and test data (num_egiv={projector.num_egiv})"):
         X_train = train_data[cls]
         X_test = test_data[cls]
 
@@ -98,6 +98,6 @@ if __name__ == "__main__":
             "test": X_test_proj
         }
         
-    print(f"\nProjected train/test data per class (k={projector.k}):")
+    print(f"\nProjected train/test data per class (num_egiv={projector.num_egiv}):")
     for cls, split in classwise_split.items():
         print(f"Class {cls}: train = {split['train'].shape}, test = {split['test'].shape}")
