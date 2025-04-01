@@ -1,6 +1,10 @@
 numpy
 scipy
 scikit-learn
-matplotlib
 pandas
-notebook  # optional, if you’re using sandbox.ipynb
+matplotlib
+tqdm
+notebook
+torch
+torchvision
+typing-extensions
