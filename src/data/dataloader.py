@@ -1,6 +1,11 @@
 from typing import Dict
 import numpy as np
 from PIL import Image
+from src.data.pca_projection import CIFAR10EigenProjector
+from src.data.generator import GaussianFeatureGenerator
+from src.utils.logger import Logger
+from tqdm import tqdm
+from numpy.typing import NDArray
 
 from torchvision.datasets import CIFAR10
 
@@ -38,6 +43,46 @@ def load_cifar10(
         classwise_data[cls] = np.stack(classwise_data[cls], axis=0)  # (samples_per_class, 3072)
 
     return classwise_data
+
+
+
+def get_data(args, logger: Logger) -> Dict[int, Dict[str, NDArray]]:
+    if args.data == "cifar10":
+        print("[INFO] Using CIFAR-10 dataset with PCA projection")
+
+        train_data = load_cifar10(root="data", train=True, samples_per_class=args.samples_per_class)
+        test_data  = load_cifar10(root="data", train=False, samples_per_class=args.samples_per_class)
+
+        projector = CIFAR10EigenProjector(num_eigv=args.num_eigv, logger=logger)
+        classwise_data = {}
+
+        for cls in tqdm(train_data, desc=f"Projecting train and test data (num_eigv={projector.num_eigv})"):
+            X_train = train_data[cls]
+            X_test = test_data[cls]
+            X_train_proj, P, mean = projector.fit_project(X_train, class_id=cls)
+            X_test_proj = projector.transform(X_test, projection_matrix=P, mean=mean)
+
+            classwise_data[cls] = {
+                "train": X_train_proj,
+                "test": X_test_proj
+            }
+
+        return classwise_data
+
+    elif args.data == "synthetic":
+        print("[INFO] Using synthetic Gaussian data")
+        generator = GaussianFeatureGenerator(
+            num_classes=args.num_classes,
+            num_features=args.num_features,
+            samples_per_class=args.samples_per_class,
+            mean_range=(args.mean_low, args.mean_high),
+            cov_scale_range=(args.cov_low, args.cov_high),
+            seed=args.seed,
+        )
+        return generator.generate_classwise_train_test()
+
+    else:
+        raise NotImplementedError(f"Dataset '{args.data}' is not supported yet.")
 
 if __name__ == "__main__":
     classwise_train = load_cifar10(root="../../data", train=False, samples_per_class=100)
