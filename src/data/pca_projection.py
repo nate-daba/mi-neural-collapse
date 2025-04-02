@@ -1,11 +1,14 @@
 import numpy as np
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 from numpy.typing import NDArray
 from .dataloader import load_cifar10
 from tqdm import tqdm
 
+from src.utils.logger import Logger
+
 class CIFAR10EigenProjector:
-    def __init__(self, num_eigv: int = 1000):
+    def __init__(self, num_eigv: int = 1000, 
+                 logger: Optional[Logger] = None):
         """
         Initializes the eigen projector.
 
@@ -13,6 +16,7 @@ class CIFAR10EigenProjector:
             k: Number of top eigenvectors to retain per class.
         """
         self.num_eigv = num_eigv
+        self.logger = logger
 
     def project_classwise(self, classwise_data: Dict[int, NDArray]) -> Dict[int, NDArray]:
         """
@@ -35,6 +39,10 @@ class CIFAR10EigenProjector:
             cov = np.cov(centered, rowvar=False)
             eigvals, eigvecs = np.linalg.eigh(cov)
             
+            if self.logger:
+                self.logger.log_eigenvalues(class_id, eigvals)
+                self.logger.log_covariance(class_id, 'eigenvectors', eigvecs)
+                
             # Top-k eigenvectors (last k columns)
             top_k_vecs = eigvecs[:, -self.num_eigv:]  # shape: (3072, k)
 
@@ -44,7 +52,7 @@ class CIFAR10EigenProjector:
 
         return projected
     
-    def fit_project(self, X: NDArray) -> Tuple[NDArray, NDArray, NDArray]:
+    def fit_project(self, X: NDArray, class_id: int = 0) -> Tuple[NDArray, NDArray, NDArray]:
         """
         Fit PCA on X and project X onto top-k components.
 
@@ -58,6 +66,10 @@ class CIFAR10EigenProjector:
         X_centered = X - mean
         cov = np.cov(X_centered, rowvar=False)
         eigvals, eigvecs = np.linalg.eigh(cov)
+        
+        if self.logger:
+            self.logger.log_eigenvalues(class_id, eigvals)
+            
         top_k = eigvecs[:, -self.num_eigv:]
         X_proj = X_centered @ top_k
         return X_proj, top_k, mean
@@ -90,7 +102,7 @@ if __name__ == "__main__":
         X_train = train_data[cls]
         X_test = test_data[cls]
 
-        X_train_proj, P, mean = projector.fit_project(X_train)
+        X_train_proj, P, mean = projector.fit_project(X_train, cls)
         X_test_proj = projector.transform(X_test, projection_matrix=P, mean=mean)
 
         classwise_split[cls] = {

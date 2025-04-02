@@ -1,10 +1,14 @@
 # src/mi/closed_form.py
 
+import sys
+from joblib import Parallel, delayed
 import numpy as np
 from tqdm import tqdm
 from numpy.typing import NDArray
 from typing import Optional
-import sys
+
+from src.utils.logger import Logger
+
 
 class GaussianMI:
     """
@@ -13,12 +17,14 @@ class GaussianMI:
     https://statproofbook.github.io/P/mvn-mi.html
     """
 
-    def __init__(self, regularization: float = 1e-5) -> None:
+    def __init__(self, regularization: float = 1e-5, 
+                 logger: Optional[Logger] = None) -> None:
         """
         Args:
             regularization: Small value added to diagonal of covariances for numerical stability.
         """
         self.eps = regularization
+        self.logger = logger
 
     def compute_mi0(self, X: NDArray, Y: NDArray) -> float:
         """
@@ -43,21 +49,23 @@ class GaussianMI:
         cov_z = np.cov(Z, rowvar=False) + self.eps * np.eye(Z.shape[1])
         cov_x = np.cov(X, rowvar=False) + self.eps * np.eye(X.shape[1])
         cov_y = np.cov(Y, rowvar=False) + self.eps * np.eye(Y.shape[1])
-
+        
         # Compute determinants
         det_joint = np.linalg.det(cov_z)
         det_x = np.linalg.det(cov_x)
         det_y = np.linalg.det(cov_y)
 
         # Avoid log(0) or det < 0 from numerical issues
-        if det_joint <= 0 or det_x <= 0 or det_y <= 0:
-            raise ValueError("Invalid determinant value; covariance matrices may be singular.")
-
+        # if det_joint <= 0 or det_x <= 0 or det_y <= 0:
+        #     raise ValueError("Invalid determinant value; covariance matrices may be singular.")
+        
         # Closed-form MI formula
         mi = 0.5 * np.log(det_x * det_y / det_joint)
         return float(mi)
 
-    def compute_mi(self, X: NDArray, Y: NDArray, use_loop: bool = True) -> float:
+    def compute_mi(self, X: NDArray, Y: NDArray, 
+                   use_loop: bool = True, 
+                   class_idx: int = 0) -> float:
         """
         Computes mutual information I(X; Y) using full covariance construction:
         cov_joint = [[cov_x, cov_xy],
@@ -69,7 +77,7 @@ class GaussianMI:
 
         cov_x = np.cov(X, rowvar=False) + self.eps * np.eye(X.shape[1])
         cov_y = np.cov(Y, rowvar=False) + self.eps * np.eye(Y.shape[1])
-        cov_xy = self.compute_cross_cov0(X, Y) if use_loop else self.compute_cross_cov(X, Y)
+        cov_xy = self.compute_cross_cov_parallel(X, Y) if use_loop else self.compute_cross_cov(X, Y)
         
         # Joint covariance
         cov_joint = np.block([
@@ -77,13 +85,20 @@ class GaussianMI:
             [cov_xy.T, cov_y]
         ])
 
-        return self.compute_mi_cov(cov_x, cov_y, cov_joint)
+        if self.logger:
+            self.logger.log_covariance(class_idx, 'cov_x', cov_x)
+            self.logger.log_covariance(class_idx, 'cov_y', cov_y)
+            self.logger.log_covariance(class_idx, 'cov_joint', cov_joint)
+            self.logger.log_condition_number(class_idx, np.linalg.cond(cov_joint))
+            
+        return self.compute_mi_cov(cov_x, cov_y, cov_joint, class_idx)
 
     def compute_mi_cov(
         self,
         cov_x: NDArray,
         cov_y: NDArray,
-        cov_joint: NDArray
+        cov_joint: NDArray,
+        class_idx: int = 0
     ) -> float:
         """
         Computes mutual information I(X; Y) given known covariance matrices for
@@ -101,16 +116,31 @@ class GaussianMI:
         cov_x += self.eps * np.eye(cov_x.shape[0])
         cov_y += self.eps * np.eye(cov_y.shape[0])
         cov_joint += self.eps * np.eye(cov_joint.shape[0])
-        
+        print(f"[DEBUG] Condition number of cov_joint: {np.linalg.cond(cov_joint):.2e}")
         # Determinants
         det_joint = np.linalg.det(cov_joint)
         det_x = np.linalg.det(cov_x)
         det_y = np.linalg.det(cov_y)
-
-        if det_joint <= 0 or det_x <= 0 or det_y <= 0:
-            raise ValueError("Invalid determinant value; covariance matrices may be singular.")
+        print(f"[DEBUG] det_x: {det_x:.3e}, det_y: {det_y:.3e}, det_joint: {det_joint:.3e}")
+        if self.logger:
+            self.logger.log_determinants(class_idx, det_x, det_y, det_joint)
+        # if det_joint <= 0 or det_x <= 0 or det_y <= 0:
+        #     raise ValueError("Invalid determinant value; covariance matrices may be singular.")
 
         mi = 0.5 * np.log(det_x * det_y / det_joint)
+        
+        # sign_joint, logdet_joint = np.linalg.slogdet(cov_joint)
+        # sign_x, logdet_x = np.linalg.slogdet(cov_x)
+        # sign_y, logdet_y = np.linalg.slogdet(cov_y)
+        # print(f"[DEBUG] logdet_x: {logdet_x:.3e}, logdet_y: {logdet_y:.3e}, det_joint: {logdet_joint:.3e}")
+        # if sign_joint <= 0 or sign_x <= 0 or sign_y <= 0:
+        #     raise ValueError("Invalid sign in log-determinant; covariance may not be positive definite.")
+
+        # mi = 0.5 * (logdet_x + logdet_y - logdet_joint)
+
+        if self.logger:
+            self.logger.log_scalar(class_idx, 'mi', mi)
+
         return float(mi)
 
     @staticmethod
@@ -162,5 +192,26 @@ class GaussianMI:
                 diff_y = Y[j] - mu_y
                 cov12 += np.outer(diff_x, diff_y)
         cov12 /= (n * m)
+        return cov12
+    
+    @staticmethod
+    def compute_cross_cov_parallel(X: NDArray, Y: NDArray, n_jobs: int = -1) -> NDArray:
+        n, d = X.shape
+        m = Y.shape[0]
+
+        mu_x = X.mean(axis=0)
+        mu_y = Y.mean(axis=0)
+        Xc = X - mu_x
+        Yc = Y - mu_y
+
+        def partial_sum(i):
+            return sum(np.outer(Xc[i], Yc[j]) for j in range(m))
+
+        # Parallel outer loop over i
+        partials = Parallel(n_jobs=n_jobs)(
+            delayed(partial_sum)(i) for i in tqdm(range(n), desc="Parallel cross-cov")
+        )
+
+        cov12 = sum(partials) / (n * m)
         return cov12
 

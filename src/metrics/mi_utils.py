@@ -23,7 +23,7 @@ def compute_per_class_mi(classwise_data: Dict[int, Dict[str, NDArray]],
     for class_idx, data in classwise_data.items():
         X_train = data["train"]
         X_test = data["test"]
-        mi = mi_calc.compute_mi(X_train, X_test, use_loop)
+        mi = mi_calc.compute_mi(X_train, X_test, use_loop, class_idx)
         mi_per_class[class_idx] = mi
     return mi_per_class
 
@@ -65,7 +65,7 @@ def compare_mi_estimators(classwise_data: Dict[int, Dict[str, NDArray]], mi_calc
         cov = data["cov"]  # this is Σ
 
         # Empirical MI from samples
-        est_mi = mi_calc.compute_mi(X_train, X_test)
+        est_mi = mi_calc.compute_mi(X_train, X_test, class_idx)
 
         # Ground-truth MI using Σ_X, Σ_Y = Σ and joint = block diagonal
         cov_x = cov

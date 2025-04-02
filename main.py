@@ -7,10 +7,12 @@ from src.mi.closed_form import GaussianMI
 from src.metrics.mi_utils import compute_per_class_mi, save_mi_to_csv, compare_mi_estimators
 from src.data.dataloader import load_cifar10
 from src.data.pca_projection import CIFAR10EigenProjector
+from src.utils.logger import Logger
+
 
 def main() -> None:
     args = parse_args()
-
+    logger = Logger()
     if args.data == "cifar10":
         print("[INFO] Using CIFAR-10 dataset with PCA projection")
 
@@ -21,7 +23,7 @@ def main() -> None:
                                   train=False,
                                   samples_per_class=args.samples_per_class)
 
-        projector = CIFAR10EigenProjector(args.num_eigv)
+        projector = CIFAR10EigenProjector(num_eigv=args.num_eigv, logger=logger)
         classwise_data = {}
 
         for cls in tqdm(train_data, desc=f"Projecting train and test data (num_eigv={projector.num_eigv})"):
@@ -55,7 +57,7 @@ def main() -> None:
         X_test = data["test"]
         print(f"Class {class_idx}: Train shape {X_train.shape}, Test shape {X_test.shape}")
     
-    mi_calc = GaussianMI()
+    mi_calc = GaussianMI(logger=logger)
     mi_per_class = compute_per_class_mi(classwise_data, mi_calc, use_loop=args.use_loop)
 
     print("\nPer-class MI (Train vs Test):")
@@ -65,6 +67,9 @@ def main() -> None:
     filepath = save_mi_to_csv(mi_per_class)
     print(f"\n[INFO] MI results saved to: {filepath}")
     
-
+    summary_df = logger.export_summary()
+    print(summary_df)
+    summary_df.to_csv("results/mi_summary.csv", index=False)
+    
 if __name__ == "__main__":
     main()
