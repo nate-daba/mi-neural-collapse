@@ -66,8 +66,17 @@ class Logger:
         os.makedirs(self.output_dir, exist_ok=True)
 
         plt.figure(figsize=(8, 6))
-        sns.heatmap(matrix, annot=True, fmt=".2e", cmap="coolwarm", cbar=True, square=True,
-                    xticklabels=False, yticklabels=False)
+        sns.heatmap(
+            matrix,
+            annot=True,
+            fmt=".1f",               # show values with 1 decimal point
+            annot_kws={"size": 6},   # smaller font size for cell numbers
+            cmap="coolwarm",
+            cbar=True,
+            square=True,
+            xticklabels=False,
+            yticklabels=False
+        )
         plt.title(f"Covariance Matrix: {name} (Class {class_idx})")
         plt.tight_layout()
         filename = os.path.join(self.output_dir, f"class_{class_idx}_{name}_covariance.png")
