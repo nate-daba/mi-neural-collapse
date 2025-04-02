@@ -123,7 +123,7 @@ class GaussianMI:
         det_y = np.linalg.det(cov_y)
         print(f"[DEBUG] det_x: {det_x:.3e}, det_y: {det_y:.3e}, det_joint: {det_joint:.3e}")
         if self.logger:
-            self.logger.log_determinants(class_idx, det_x, det_y, det_joint)
+            self.logger.log_det(class_idx, det_x, det_y, det_joint)
         # if det_joint <= 0 or det_x <= 0 or det_y <= 0:
         #     raise ValueError("Invalid determinant value; covariance matrices may be singular.")
 
