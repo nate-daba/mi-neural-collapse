@@ -41,7 +41,6 @@ class CIFAR10EigenProjector:
             
             if self.logger:
                 self.logger.log_eigenvalues(class_id, eigvals)
-                self.logger.log_covariance(class_id, 'eigenvectors', eigvecs)
                 
             # Top-k eigenvectors (last k columns)
             top_k_vecs = eigvecs[:, -self.num_eigv:]  # shape: (3072, k)

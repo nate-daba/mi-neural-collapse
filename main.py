@@ -69,7 +69,7 @@ def main() -> None:
     
     summary_df = logger.export_summary()
     print(summary_df)
-    summary_df.to_csv("results/mi_summary.csv", index=False)
+    logger.save_summary_csv()
     
 if __name__ == "__main__":
     main()

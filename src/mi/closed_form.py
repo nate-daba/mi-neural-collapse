@@ -86,10 +86,10 @@ class GaussianMI:
         ])
 
         if self.logger:
-            self.logger.log_covariance(class_idx, 'cov_x', cov_x)
-            self.logger.log_covariance(class_idx, 'cov_y', cov_y)
-            self.logger.log_covariance(class_idx, 'cov_joint', cov_joint)
-            self.logger.log_condition_number(class_idx, np.linalg.cond(cov_joint))
+            self.logger.log_cov(class_idx, 'cov_x', cov_x)
+            self.logger.log_cov(class_idx, 'cov_y', cov_y)
+            self.logger.log_cov(class_idx, 'cov_joint', cov_joint)
+            self.logger.log_cond_num(class_idx, np.linalg.cond(cov_joint))
             
         return self.compute_mi_cov(cov_x, cov_y, cov_joint, class_idx)
 

@@ -1,26 +1,31 @@
 # src/utils/logger.py
+import os
+from typing import Dict, Optional
 
 import numpy as np
-from typing import Dict, Optional
 from numpy.typing import NDArray
-import os
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 class Logger:
-    def __init__(self):
+    def __init__(self, output_dir: str = "results/plots"):
         self.logs: Dict[int, Dict[str, NDArray]] = {}
-
-    def log_covariance(self, class_idx: int, cov_type: str, matrix: NDArray) -> None:
+        self.output_dir = output_dir
+    def log_cov(self, class_idx: int, cov_type: str, matrix: NDArray) -> None:
         if class_idx not in self.logs:
             self.logs[class_idx] = {}
         self.logs[class_idx][cov_type] = matrix
+        self.plot_cov_mat(matrix, class_idx, cov_type)
+        self.log_offdiag_ratio(class_idx, matrix, f"{cov_type}_offdiag_ratio")
 
-    def log_eigenvalues(self, class_idx: int, eigvals: NDArray) -> None:
+    def log_eigv(self, class_idx: int, eigvals: NDArray) -> None:
         if class_idx not in self.logs:
             self.logs[class_idx] = {}
         self.logs[class_idx]['eigvals'] = eigvals
 
-    def log_condition_number(self, class_idx: int, cond: float) -> None:
+    def log_cond_num(self, class_idx: int, cond: float) -> None:
         if class_idx not in self.logs:
             self.logs[class_idx] = {}
         self.logs[class_idx]['cond'] = cond
@@ -31,7 +36,7 @@ class Logger:
             for name, matrix in values.items():
                 np.savez(os.path.join(output_dir, f"class_{class_idx}_{name}.npz"), matrix)
                 
-    def log_determinants(self, class_idx: int, 
+    def log_det(self, class_idx: int, 
                          det_x: float, 
                          det_y: float, 
                          det_joint: float) -> None:
@@ -51,7 +56,34 @@ class Logger:
             raise KeyError(f"[Logger] Key '{key}' already logged for class {class_idx}")
 
         self.logs[class_idx][key] = value
+        
+    def plot_cov_mat(
+        self,
+        matrix: NDArray,
+        class_idx: int,
+        name: str
+    ) -> None:
+        os.makedirs(self.output_dir, exist_ok=True)
 
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(matrix, annot=True, fmt=".2e", cmap="coolwarm", cbar=True, square=True,
+                    xticklabels=False, yticklabels=False)
+        plt.title(f"Covariance Matrix: {name} (Class {class_idx})")
+        plt.tight_layout()
+        filename = os.path.join(self.output_dir, f"class_{class_idx}_{name}_covariance.png")
+        plt.savefig(filename, dpi=300)
+        plt.close()
+        
+    def log_offdiag_ratio(self, class_idx: int, matrix: NDArray, key: str) -> None:
+        if class_idx not in self.logs:
+            self.logs[class_idx] = {}
+
+        diag = np.diag(np.diag(matrix))
+        off_diag_norm = np.linalg.norm(matrix - diag)
+        diag_norm = np.linalg.norm(diag)
+        ratio = off_diag_norm / (diag_norm + 1e-10)
+        self.logs[class_idx][key] = ratio
+        
     def export_summary(self) -> pd.DataFrame:
         rows = []
         for cls, vals in self.logs.items():
@@ -67,6 +99,11 @@ class Logger:
             }
             rows.append(row)
         return pd.DataFrame(rows)
+    
+    def save_summary_csv(self, path: str = "results/cov_summary.csv") -> None:
+        df = self.export_summary()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        df.to_csv(path, index=False)
     
     def __repr__(self) -> str:
         return f"<Logger with logs for classes: {list(self.logs.keys())}>"
