@@ -1,7 +1,6 @@
 import numpy as np
 from typing import Dict, Tuple, Optional
 from numpy.typing import NDArray
-from .dataloader import load_cifar10
 from tqdm import tqdm
 
 from src.utils.logger import Logger
@@ -40,7 +39,7 @@ class CIFAR10EigenProjector:
             eigvals, eigvecs = np.linalg.eigh(cov)
             
             if self.logger:
-                self.logger.log_eigenvalues(class_id, eigvals)
+                self.logger.log_eigv(class_id, eigvals)
                 
             # Top-k eigenvectors (last k columns)
             top_k_vecs = eigvecs[:, -self.num_eigv:]  # shape: (3072, k)
@@ -67,7 +66,7 @@ class CIFAR10EigenProjector:
         eigvals, eigvecs = np.linalg.eigh(cov)
         
         if self.logger:
-            self.logger.log_eigenvalues(class_id, eigvals)
+            self.logger.log_eigv(class_id, eigvals)
             
         top_k = eigvecs[:, -self.num_eigv:]
         X_proj = X_centered @ top_k
