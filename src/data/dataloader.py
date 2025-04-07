@@ -23,7 +23,7 @@ def load_cifar10(
         samples_per_class: Number of samples to load per class
 
     Returns:
-        A dictionary mapping class_index (0–9) to an array of shape (samples_per_class, 3072)
+        A dictionary mapping class_index (0–9) to an array of shape (samples_per_class, 3072)dddd
     """
     dataset = CIFAR10(root=root, train=train, download=True)
 
@@ -46,12 +46,14 @@ def load_cifar10(
 
 
 
-def get_data(args, logger: Logger) -> Dict[int, Dict[str, NDArray]]:
+def get_data(args: , logger: Logger) -> Dict[int, Dict[str, NDArray]]:
     if args.data == "cifar10":
         print("[INFO] Using CIFAR-10 dataset with PCA projection")
 
-        train_data = load_cifar10(root="data", train=True, samples_per_class=args.samples_per_class)
-        test_data  = load_cifar10(root="data", train=False, samples_per_class=args.samples_per_class)
+        train_data = load_cifar10(root="data", train=True, 
+                                  samples_per_class=args.samples_per_class)
+        test_data  = load_cifar10(root="data", train=False, 
+                                  samples_per_class=args.samples_per_class)
 
         projector = CIFAR10EigenProjector(num_eigv=args.num_eigv, logger=logger)
         classwise_data = {}
@@ -59,8 +61,13 @@ def get_data(args, logger: Logger) -> Dict[int, Dict[str, NDArray]]:
         for cls in tqdm(train_data, desc=f"Projecting train and test data (num_eigv={projector.num_eigv})"):
             X_train = train_data[cls]
             X_test = test_data[cls]
-            X_train_proj, P, mean = projector.fit_project(X_train, class_id=cls)
-            X_test_proj = projector.transform(X_test, projection_matrix=P, mean=mean)
+            X_train_proj, P, mean = projector.fit_project(X_train, 
+                                                          class_id=cls, 
+                                                          use_corr=args.use_corr)
+            X_test_proj = projector.transform(X_test, 
+                                              projection_matrix=P, 
+                                              mean=mean,
+                                              use_corr=args.use_corr)
 
             classwise_data[cls] = {
                 "train": X_train_proj,
