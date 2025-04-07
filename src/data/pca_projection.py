@@ -50,29 +50,38 @@ class CIFAR10EigenProjector:
 
         return projected
     
-    def fit_project(self, X: NDArray, class_id: int = 0) -> Tuple[NDArray, NDArray, NDArray]:
+    def fit_project(self, X: NDArray, 
+                    class_id: int = 0, 
+                    use_corr: bool = False) -> Tuple[NDArray, NDArray, NDArray]:
         """
         Fit PCA on X and project X onto top-k components.
 
-        Returns:
-            Tuple of:
-            - projected data (N, k)
-            - projection matrix (D, k)
-            - mean vector (D,)
+        If use_corr=True, uses uncentered correlation matrix (X.T @ X / n) instead of covariance matrix.
         """
-        mean = np.mean(X, axis=0)
-        X_centered = X - mean
-        cov = np.cov(X_centered, rowvar=False)
-        eigvals, eigvecs = np.linalg.eigh(cov)
-        
+        if use_corr:
+            # No mean-centering
+            XtX = X.T @ X / X.shape[0]  # (D, D) correlation-like matrix
+            eigvals, eigvecs = np.linalg.eigh(XtX)
+        else:
+            mean = np.mean(X, axis=0)
+            X = X - mean
+            cov = np.cov(X, rowvar=False)
+            eigvals, eigvecs = np.linalg.eigh(cov)
+
         if self.logger:
             self.logger.log_eigv(class_id, eigvals)
-            
+
+        # Take top-k eigenvectors
         top_k = eigvecs[:, -self.num_eigv:]
-        X_proj = X_centered @ top_k
+        X_proj = X @ top_k
+
+        mean = np.zeros(X.shape[1]) if use_corr else mean
         return X_proj, top_k, mean
 
-    def transform(self, X: NDArray, projection_matrix: NDArray, mean: NDArray) -> NDArray:
+    def transform(self, X: NDArray, 
+                  projection_matrix: NDArray, 
+                  mean: NDArray,
+                  use_corr: bool = False) -> NDArray:
         """
         Projects new data onto previously computed eigenvectors.
 
@@ -84,7 +93,7 @@ class CIFAR10EigenProjector:
         Returns:
             Projected data (N, k)
         """
-        return (X - mean) @ projection_matrix
+        return X @ projection_matrix if use_corr else (X - mean) @ projection_matrix
     
 if __name__ == "__main__":
     from dataloader import load_cifar10
