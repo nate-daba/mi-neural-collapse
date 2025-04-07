@@ -22,7 +22,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cov_high", type=float, default=1.5, help="Upper bound for covariance scale")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--data", type=str, default="synthetic", choices=["synthetic", "cifar10", "cifar100", "imagenet"], help="Dataset to use for MI analysis")
-    parser.add_argument("--use_loop", action="store_true", help="Enable boolean feature (default: False)"
-)
+    parser.add_argument("--use_loop", action="store_true", help="Enable boolean feature (default: False)")
+    parser.add_argument("--use_corr", action="store_true", help="Use correlation matrices instead of covariance")
+    parser.add_argument("--log", action="store_true", help="log intermediate results")
+
 
     return parser.parse_args()
