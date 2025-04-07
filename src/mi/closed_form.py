@@ -195,23 +195,83 @@ class GaussianMI:
         return cov12
     
     @staticmethod
-    def compute_cross_cov_parallel(X: NDArray, Y: NDArray, n_jobs: int = -1) -> NDArray:
+    def compute_cross_cov_parallel(X: NDArray, Y: NDArray, 
+                                    center: bool = True,
+                                    n_jobs: int = -1) -> NDArray:
         n, d = X.shape
         m = Y.shape[0]
 
-        mu_x = X.mean(axis=0)
-        mu_y = Y.mean(axis=0)
-        Xc = X - mu_x
-        Yc = Y - mu_y
+        if center:
+            mu_x = X.mean(axis=0)
+            mu_y = Y.mean(axis=0)
+            X = X - mu_x
+            Y = Y - mu_y
 
         def partial_sum(i):
-            return sum(np.outer(Xc[i], Yc[j]) for j in range(m))
+            return sum(np.outer(X[i], Y[j]) for j in range(m))
 
-        # Parallel outer loop over i
         partials = Parallel(n_jobs=n_jobs)(
             delayed(partial_sum)(i) for i in tqdm(range(n), desc="Parallel cross-cov")
         )
 
-        cov12 = sum(partials) / (n * m)
-        return cov12
+        cov = sum(partials) / (n * m)
+        return cov
+    
+    def compute_mi_corr(
+        self,
+        X: NDArray,
+        Y: NDArray,
+        class_idx: int = 0,
+        use_loop: bool = True
+    ) -> float:
+        """
+        Computes mutual information I(X; Y) using correlation matrices,
+        i.e., E[XY^T] instead of centered covariance.
+
+        This method preserves the means of X and Y (i.e., no mean-centering).
+        """
+        n, d = X.shape
+        m = Y.shape[0]
+
+        # Uncentered correlation matrices
+        corr_x = X.T @ X / n       # (d, d)
+        corr_y = Y.T @ Y / m       # (d, d)
+        if use_loop:
+            corr_xy = self.compute_cross_cov_parallel(X, Y, center=False)
+        else:
+            corr_xy = X.T @ Y / (n * m)
+
+        # Full correlation matrix
+        corr_joint = np.block([
+            [corr_x, corr_xy],
+            [corr_xy.T, corr_y]
+        ])
+
+        # Regularize all
+        corr_x += self.eps * np.eye(d)
+        corr_y += self.eps * np.eye(d)
+        corr_joint += self.eps * np.eye(2 * d)
+
+        # Logging
+        if self.logger:
+            self.logger.log_cov(class_idx, 'corr_x', corr_x)
+            self.logger.log_cov(class_idx, 'corr_y', corr_y)
+            self.logger.log_cov(class_idx, 'corr_xy', corr_xy)
+            self.logger.log_cov(class_idx, 'corr_joint', corr_joint)
+            self.logger.log_cond_num(class_idx, np.linalg.cond(corr_joint))
+
+        # Determinants
+        det_joint = np.linalg.det(corr_joint)
+        det_x = np.linalg.det(corr_x)
+        det_y = np.linalg.det(corr_y)
+
+        if self.logger:
+            self.logger.log_det(class_idx, det_x, det_y, det_joint)
+
+        # MI from determinant ratio
+        mi = 0.5 * np.log(det_x * det_y / det_joint)
+        if self.logger:
+            self.logger.log_scalar(class_idx, 'mi_corr', mi)
+
+        return float(mi)
 
