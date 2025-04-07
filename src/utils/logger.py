@@ -7,12 +7,14 @@ from numpy.typing import NDArray
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import argparse
 
 
 class Logger:
-    def __init__(self, output_dir: str = "results/plots"):
+    def __init__(self, args: argparse.Namespace = None, output_dir: str = "results/plots", ):
         self.logs: Dict[int, Dict[str, NDArray]] = {}
         self.output_dir = output_dir
+        self.args = args
     def log_cov(self, class_idx: int, cov_type: str, matrix: NDArray) -> None:
         if class_idx not in self.logs:
             self.logs[class_idx] = {}
@@ -95,6 +97,7 @@ class Logger:
         
     def export_summary(self) -> pd.DataFrame:
         rows = []
+        mi_type = 'mi_corr' if self.args.use_corr else 'mi'
         for cls, vals in self.logs.items():
             row = {
                 'class': cls,
@@ -104,13 +107,20 @@ class Logger:
                 'det_x': vals.get('det_x'),
                 'det_y': vals.get('det_y'),
                 'det_joint': vals.get('det_joint'),
-                'mi': vals.get('mi'),  # You log this using log_scalar(...)
+                mi_type: vals.get(mi_type), 
             }
             rows.append(row)
         return pd.DataFrame(rows)
     
-    def save_summary_csv(self, path: str = "results/cov_summary.csv") -> None:
+    def save_summary_csv(self, path: str = "results/summary.csv", prefix: Optional[str] = None) -> None:
         df = self.export_summary()
+        
+        # Adjust filename if prefix is provided
+        if prefix:
+            dir_name, base_name = os.path.split(path)
+            name, ext = os.path.splitext(base_name)
+            path = os.path.join(dir_name, f"{prefix}_{name}{ext}")
+        
         os.makedirs(os.path.dirname(path), exist_ok=True)
         df.to_csv(path, index=False)
     
