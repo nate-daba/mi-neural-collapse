@@ -1,4 +1,5 @@
 from typing import Dict
+from argparse import Namespace
 import numpy as np
 from PIL import Image
 from src.data.pca_projection import CIFAR10EigenProjector
@@ -6,6 +7,7 @@ from src.data.generator import GaussianFeatureGenerator
 from src.utils.logger import Logger
 from tqdm import tqdm
 from numpy.typing import NDArray
+
 
 from torchvision.datasets import CIFAR10
 
@@ -46,7 +48,7 @@ def load_cifar10(
 
 
 
-def get_data(args: , logger: Logger) -> Dict[int, Dict[str, NDArray]]:
+def get_data(args: Namespace, logger: Logger) -> Dict[int, Dict[str, NDArray]]:
     if args.data == "cifar10":
         print("[INFO] Using CIFAR-10 dataset with PCA projection")
 
