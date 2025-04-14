@@ -7,3 +7,5 @@ results/
 notebooks
 data/
 ._.DS_Store
+wandb/
+checkpoints/
