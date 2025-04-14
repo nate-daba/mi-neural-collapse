@@ -3,67 +3,70 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchinfo import summary
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 class AE(nn.Module):
     def __init__(self, 
                  input_channels: int = 3,
+                 out_channels: int = 16,
                  latent_dim: int = 64,
-                 hidden_dims: list[int] = [32, 64, 128]):
+                 act_fn=nn.ReLU()):
         super().__init__()
 
-        self.latent_dim = latent_dim
-        self.hidden_dims = hidden_dims
-
         # Encoder
-        modules = []
-        in_channels = input_channels
-        for h_dim in hidden_dims:
-            modules.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, h_dim, kernel_size=3, stride=2, padding=1),
-                    nn.ReLU()
-                )
-            )
-            in_channels = h_dim
-        self.encoder = nn.Sequential(*modules)
-
-        # Flatten to latent vector
-        self.flatten = nn.Flatten()
-        self.fc_enc = nn.Linear(hidden_dims[-1]*4*4, latent_dim)
-
-        # Latent to decoder input
-        self.fc_dec = nn.Linear(latent_dim, hidden_dims[-1]*4*4)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(input_channels, out_channels, 3, padding=1),  # (32, 32)
+            act_fn,
+            nn.Conv2d(out_channels, out_channels, 3, padding=1),
+            act_fn,
+            nn.Conv2d(out_channels, 2 * out_channels, 3, padding=1, stride=2),  # (16, 16)
+            act_fn,
+            nn.Conv2d(2 * out_channels, 2 * out_channels, 3, padding=1),
+            act_fn,
+            nn.Conv2d(2 * out_channels, 4 * out_channels, 3, padding=1, stride=2),  # (8, 8)
+            act_fn,
+            nn.Conv2d(4 * out_channels, 4 * out_channels, 3, padding=1),
+            act_fn,
+            nn.Flatten(),
+            nn.Linear(4 * out_channels * 8 * 8, latent_dim),
+            act_fn
+        )
 
         # Decoder
-        hidden_dims_rev = hidden_dims[::-1]
-        modules = []
-        for i in range(len(hidden_dims_rev) - 1):
-            modules.append(
-                nn.Sequential(
-                    nn.ConvTranspose2d(hidden_dims_rev[i], hidden_dims_rev[i + 1],
-                                       kernel_size=3, stride=2, padding=1, output_padding=1),
-                    nn.ReLU()
-                )
-            )
-        self.decoder = nn.Sequential(*modules)
+        self.linear = nn.Sequential(
+            nn.Linear(latent_dim, 4 * out_channels * 8 * 8),
+            act_fn
+        )
 
-        # Final layer to reconstruct input
-        self.final_layer = nn.ConvTranspose2d(hidden_dims[0], input_channels,
-                                              kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(4 * out_channels, 4 * out_channels, 3, padding=1),  # (8, 8)
+            act_fn,
+            nn.ConvTranspose2d(4 * out_channels, 2 * out_channels, 3, padding=1, stride=2, output_padding=1),  # (16, 16)
+            act_fn,
+            nn.ConvTranspose2d(2 * out_channels, 2 * out_channels, 3, padding=1),
+            act_fn,
+            nn.ConvTranspose2d(2 * out_channels, out_channels, 3, padding=1, stride=2, output_padding=1),  # (32, 32)
+            act_fn,
+            nn.ConvTranspose2d(out_channels, out_channels, 3, padding=1),
+            act_fn,
+            nn.ConvTranspose2d(out_channels, input_channels, 3, padding=1)
+        )
 
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.encoder(x)         # B x C x 4 x 4
-        x = self.flatten(x)         # B x (C*4*4)
-        z = self.fc_enc(x)          # B x latent_dim
-        return z
+    def encode(self, x):
+        return self.encoder(x)
 
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
-        x = self.fc_dec(z)          # B x (C*4*4)
-        x = x.view(-1, self.hidden_dims[-1], 4, 4)
-        x = self.decoder(x)
-        x = torch.sigmoid(self.final_layer(x))  # B x 3 x 32 x 32
-        return x
+    def decode(self, z):
+        z = self.linear(z)
+        z = z.view(z.size(0), -1, 8, 8)
+        return self.decoder(z)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         z = self.encode(x)
         x_hat = self.decode(z)
         return x_hat
