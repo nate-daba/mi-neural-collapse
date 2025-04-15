@@ -9,3 +9,5 @@ data/
 ._.DS_Store
 wandb/
 checkpoints/
+figures/
+sandbox.ipynb
