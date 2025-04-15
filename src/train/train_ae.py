@@ -29,10 +29,10 @@ def save_checkpoint(model,
     Saves a model checkpoint including weights, optimizer state, scheduler state, etc.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    checkpoint_dir = os.path.join(base_dir, f"{timestamp}-val-loss-{val_loss:.2f}")
+    checkpoint_dir = os.path.join(base_dir, f"{timestamp}-val-loss-{val_loss:.6f}")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    filename = f"checkpoint_val_loss_{val_loss:.2f}.ckpt"
+    filename = f"checkpoint_val_loss_{val_loss:.6f}.ckpt"
     filepath = os.path.join(checkpoint_dir, filename)
 
     checkpoint = {
