@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 from src.models.ae import AE
+from scripts.whiten import whiten
 
 
 def get_dataloaders(batch_size: int):
@@ -83,6 +84,12 @@ def main():
     X_enc = encode_dataset(model, train_loader, device)
     np.save(args.output, X_enc)
     print(f"Saved encoded features to {args.output} with shape {X_enc.shape}")
+    
+    # Whitening the encoded features
+    X_enc_white = whiten(X_enc, method="zca", fudge=1e-8)
+    white_output_path = args.output.replace("train_enc.npy", "train_enc_white.npy")
+    np.save(white_output_path, X_enc_white)
+    print(f"Saved whitened encoded features to {white_output_path} with shape {X_enc_white.shape}")
 
 if __name__ == "__main__":
     main()
