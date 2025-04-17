@@ -10,3 +10,4 @@ torchvision
 typing-extensions
 torchinfo
 wandb
+statsmodels
