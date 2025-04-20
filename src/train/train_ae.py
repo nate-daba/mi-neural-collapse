@@ -16,43 +16,12 @@ import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from src.models.ae import AE
-
-def save_checkpoint(model, 
-                    optimizer, 
-                    scheduler, 
-                    epoch, 
-                    val_loss, 
-                    train_loss,
-                    config, 
-                    base_dir="checkpoints"):
-    """
-    Saves a model checkpoint including weights, optimizer state, scheduler state, etc.
-    """
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    checkpoint_dir = os.path.join(base_dir, f"{timestamp}-val-loss-{val_loss:.6f}")
-    os.makedirs(checkpoint_dir, exist_ok=True)
-
-    filename = f"checkpoint_val_loss_{val_loss:.6f}.ckpt"
-    filepath = os.path.join(checkpoint_dir, filename)
-
-    checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
-        'val_loss': val_loss,
-        'train_loss': train_loss,
-        'config': dict(config)
-    }
-
-    torch.save(checkpoint, filepath)
-    return filepath
+from src.utils.utils import save_checkpoint
 
 class AETrainer:
     def __init__(self, config: Any, timestamp: str):
         self.device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
         self.config = config
-        self.timestamp = timestamp
         self._init_data()
         self._init_model()
 
@@ -101,7 +70,7 @@ class AETrainer:
             min_lr=1e-6
         )
 
-    def train(self):
+    def train(self) -> None:
         best_val_loss = float('inf')
 
         for epoch in tqdm(range(self.config.epochs), desc="Training epoch"):
@@ -128,13 +97,13 @@ class AETrainer:
                     val_loss=val_loss,
                     train_loss=train_loss,
                     config=self.config,
-                    base_dir=os.path.join("checkpoints", self.timestamp)
+                    base_dir=os.path.join("checkpoints", self.config.timestamp)
                 )
                 wandb.log({"checkpoint_saved_at": ckpt_path})
 
             self.scheduler.step(val_loss)
 
-    def _run_epoch(self, loader, train=True):
+    def _run_epoch(self, loader, train=True) -> float:
         self.model.train() if train else self.model.eval()
         total_loss = 0
         with torch.set_grad_enabled(train):
@@ -167,9 +136,10 @@ def run_training():
         "learning_rate": 1e-3,
         "latent_dim": 200,
         "optimizer": "Adam",
-        "log_images_every": 5
+        "log_images_every": 5,
+        "timestamp": timestamp
     })
-    trainer = AETrainer(config=wandb.config, timestamp=timestamp)
+    trainer = AETrainer(config=wandb.config)
     trainer.train()
 
 if __name__ == "__main__":
