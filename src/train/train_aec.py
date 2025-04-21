@@ -79,7 +79,7 @@ class AECTrainer:
 
         self.optimizer = optim.Adam(self.model.parameters(), 
                                     lr=self.config.learning_rate,
-                                    weight_decay=1e-5)
+                                    weight_decay=self.config.weight_decay)
         self.criterion = nn.CrossEntropyLoss()
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
@@ -194,7 +194,8 @@ def run_training() -> None:
         "pretrained_model_path": "path/to/your/pretrained/model",  # specify the path
         "optimizer": "Adam",
         "log_images_every": 5,
-        "timestamp": timestamp
+        "timestamp": timestamp,
+        "weight_decay": 1e-5
     })
     trainer = AECTrainer(config=wandb.config)
     trainer.train()
