@@ -186,7 +186,7 @@ def run_training() -> None:
     Initializes and runs the training process.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    wandb.init(project="aec-cifar10", name=f"ae-xavier-init-{timestamp}", config={
+    wandb.init(project="aec-cifar10", name=f"2d-dropout-p=0.3-{timestamp}", config={
         "epochs": 100,
         "batch_size": 64,
         "learning_rate": 1e-3,
@@ -195,7 +195,7 @@ def run_training() -> None:
         "optimizer": "Adam",
         "log_images_every": 5,
         "timestamp": timestamp,
-        "weight_decay": 1e-5
+        "weight_decay": 1e-4
     })
     trainer = AECTrainer(config=wandb.config)
     trainer.train()

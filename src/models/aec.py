@@ -25,19 +25,26 @@ class AEC(nn.Module):
         self.encoder = nn.Sequential(
             nn.Conv2d(input_channels, out_channels, 3, padding=1),  # (32, 32)
             nn.ReLU(),
+            nn.Dropout2d(p=0.3),
             nn.Conv2d(out_channels, out_channels, 3, padding=1),
             nn.ReLU(),
+            nn.Dropout2d(p=0.3),
             nn.Conv2d(out_channels, 2 * out_channels, 3, padding=1, stride=2),  # (16, 16)
             nn.ReLU(),
+            nn.Dropout2d(p=0.3),
             nn.Conv2d(2 * out_channels, 2 * out_channels, 3, padding=1),
             nn.ReLU(),
+            nn.Dropout2d(p=0.3),
             nn.Conv2d(2 * out_channels, 4 * out_channels, 3, padding=1, stride=2),  # (8, 8)
             nn.ReLU(),
+            nn.Dropout2d(p=0.3),
             nn.Conv2d(4 * out_channels, 4 * out_channels, 3, padding=1),
             nn.ReLU(),
+            nn.Dropout2d(p=0.3),
             nn.Flatten(),
             nn.Linear(4 * out_channels * 8 * 8, latent_dim),  # Latent dimension
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout(p=0.5)
         )
 
         # Classifier head (Linear layer after the encoder)
