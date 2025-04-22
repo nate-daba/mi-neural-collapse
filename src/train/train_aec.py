@@ -62,7 +62,9 @@ class AECTrainer:
         Initializes the model, optimizer, and loss function.
         The encoder part of the autoencoder is loaded and frozen.
         """
-        self.model = AEC(latent_dim=self.config.latent_dim).to(self.device)
+        self.model = AEC(latent_dim=self.config.latent_dim,
+                         pdrop_2d=self.config.pdrop_2d,
+                         pdrop_1d=self.config.pdrop_1d).to(self.device)
         summary(self.model, input_size=(1, 3, 32, 32))
         def init_weights(module):
             if isinstance(module, nn.Conv2d) or isinstance(module, nn.ConvTranspose2d):
@@ -186,8 +188,8 @@ def run_training() -> None:
     Initializes and runs the training process.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    wandb.init(project="aec-cifar10", name=f"2d-dropout-p=0.3-{timestamp}", config={
-        "epochs": 100,
+    wandb.init(project="aec-cifar10", name=f"aec-2d-dropout-p=0.1-{timestamp}", config={
+        "epochs": 200,
         "batch_size": 64,
         "learning_rate": 1e-3,
         "latent_dim": 200,
@@ -195,7 +197,9 @@ def run_training() -> None:
         "optimizer": "Adam",
         "log_images_every": 5,
         "timestamp": timestamp,
-        "weight_decay": 1e-4
+        "weight_decay": 1e-4,
+        "pdrop_2d": 0.3,
+        "pdrop_1d": 0.5
     })
     trainer = AECTrainer(config=wandb.config)
     trainer.train()

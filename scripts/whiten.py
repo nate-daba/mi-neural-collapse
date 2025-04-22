@@ -102,14 +102,15 @@ def whiten(X, assume_centered=False, method='zca', fudge=1e-8):
     # Center
     X_centered = X
     if not assume_centered:
-        X_centered = X - np.mean(X, axis=0)
+        X_mean = np.mean(X, axis=0)
+        X_centered = X - X_mean
 
     W = whitening_matrix(
         X_centered, assume_centered=True, method=method, fudge=fudge
     )
     Z = X_centered @ W.T
     Z = Z.reshape(X.shape)
-    return Z
+    return Z, W, X_mean
 
 
 def coloring_matrix(X, assume_centered=False, method='cholesky'):

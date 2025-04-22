@@ -18,6 +18,8 @@ class AEC(nn.Module):
                  input_channels: int = 3, 
                  latent_dim: int = 200, 
                  out_channels: int = 16, 
+                 pdrop_2d: int = 0.3,
+                 pdrop_1d: int = 0.5,
                  num_classes: int = 10) -> None:
         super(AEC, self).__init__()
 
@@ -25,26 +27,26 @@ class AEC(nn.Module):
         self.encoder = nn.Sequential(
             nn.Conv2d(input_channels, out_channels, 3, padding=1),  # (32, 32)
             nn.ReLU(),
-            nn.Dropout2d(p=0.3),
+            nn.Dropout2d(p=pdrop_2d),
             nn.Conv2d(out_channels, out_channels, 3, padding=1),
             nn.ReLU(),
-            nn.Dropout2d(p=0.3),
+            nn.Dropout2d(p=pdrop_2d),
             nn.Conv2d(out_channels, 2 * out_channels, 3, padding=1, stride=2),  # (16, 16)
             nn.ReLU(),
-            nn.Dropout2d(p=0.3),
+            nn.Dropout2d(p=pdrop_2d),
             nn.Conv2d(2 * out_channels, 2 * out_channels, 3, padding=1),
             nn.ReLU(),
-            nn.Dropout2d(p=0.3),
+            nn.Dropout2d(p=pdrop_2d),
             nn.Conv2d(2 * out_channels, 4 * out_channels, 3, padding=1, stride=2),  # (8, 8)
             nn.ReLU(),
-            nn.Dropout2d(p=0.3),
+            nn.Dropout2d(p=pdrop_2d),
             nn.Conv2d(4 * out_channels, 4 * out_channels, 3, padding=1),
             nn.ReLU(),
-            nn.Dropout2d(p=0.3),
+            nn.Dropout2d(p=pdrop_2d),
             nn.Flatten(),
             nn.Linear(4 * out_channels * 8 * 8, latent_dim),  # Latent dimension
             nn.ReLU(),
-            nn.Dropout(p=0.5)
+            nn.Dropout(p=pdrop_1d)
         )
 
         # Classifier head (Linear layer after the encoder)
