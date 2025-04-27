@@ -63,9 +63,10 @@ class AECTrainer:
         The encoder part of the autoencoder is loaded and frozen.
         """
         self.model = AEC(latent_dim=self.config.latent_dim,
-                         pdrop_2d=self.config.pdrop_2d,
-                         pdrop_1d=self.config.pdrop_1d).to(self.device)
+                        pdrop_2d=self.config.pdrop_2d,
+                        pdrop_1d=self.config.pdrop_1d).to(self.device)
         summary(self.model, input_size=(1, 3, 32, 32))
+        
         def init_weights(module):
             if isinstance(module, nn.Conv2d) or isinstance(module, nn.ConvTranspose2d):
                 nn.init.xavier_uniform_(module.weight)
@@ -90,6 +91,51 @@ class AECTrainer:
             patience=5,
             min_lr=1e-6
         )
+        
+        # Use wandb.watch to track parameters and gradients
+        wandb.watch(
+            self.model,
+            log="all",     # Track both gradients and parameters
+            log_freq=100,  # Adjust this based on your needs
+            log_graph=True # Visualize model architecture
+        )
+        
+        # Set up activation tracking for key layers
+        self.activation_hooks = []
+        self.activations = {}
+        
+        # Only track a few strategically important layers to avoid overhead
+        # For example: the first conv layer, middle layer, and final encoding layer
+        layers_to_track = []
+        final_layers = []
+        # Find encoder layers
+        for name, module in self.model.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)) and 'encoder' in name:
+                layers_to_track.append((name, module))
+            # Track the final linear layer (often part of classifier)
+            elif isinstance(module, nn.Linear) and ('classifier' in name or 'fc' in name or 'output' in name):
+                final_layers.append((name, module))
+                
+        # If there are many layers, select just a few representative ones
+        # if len(layers_to_track) > 3:
+        #     # Get first, middle and last layer
+        #     indices = [0, len(layers_to_track) // 2, -1]
+        #     layers_to_track = [layers_to_track[i] for i in indices]
+        
+        # Register hooks for these layers
+        for name, module in layers_to_track:
+            self.activation_hooks.append(
+                module.register_forward_hook(
+                    lambda m, inp, out, name=name: self._save_activation(name, out)
+                )
+            )
+    
+    def _save_activation(self, name, activation):
+        """Save activations from forward pass for logging later"""
+        # For tensors or tuple outputs, handle appropriately
+        if isinstance(activation, tuple):
+            activation = activation[0]
+        self.activations[name] = activation.detach()
 
     def train(self) -> None:
         """
@@ -104,11 +150,39 @@ class AECTrainer:
             total = 0
 
             # Training loop
-            for images, labels in self.train_loader:
+            for i, (images, labels) in enumerate(self.train_loader):
                 images, labels = images.to(self.device), labels.to(self.device)
                 self.optimizer.zero_grad()
 
-                outputs = self.model(images)
+                outputs, encoded = self.model(images)
+                
+                # Log activations (you already have 'encoded' for the latent space)
+                wandb.log({"penultimate_activations": wandb.Histogram(encoded.cpu().numpy())})
+                
+                # Log a sample of other tracked activations (periodically to avoid overhead)
+                if i % 100 == 0:  # Adjust frequency as needed
+                    for name, activation in self.activations.items():
+                        # Flatten for histogram visualization
+                        flat_activation = activation.flatten().cpu().numpy()
+                        wandb.log({f"activations/{name}": wandb.Histogram(flat_activation)})
+                        
+                        # For convolutional layers, visualize feature maps (first few channels of first image)
+                        if len(activation.shape) == 4:  # [batch, channels, height, width]
+                            # Take first image, first few channels
+                            num_channels = min(9, activation.shape[1])
+                            feature_maps = activation[0, :num_channels].cpu().numpy()
+                            
+                            # Normalize for better visualization
+                            images_to_log = []
+                            for idx in range(num_channels):
+                                # Normalize to [0,1] range for visualization
+                                fmap = feature_maps[idx]
+                                if fmap.max() > fmap.min():
+                                    fmap = (fmap - fmap.min()) / (fmap.max() - fmap.min())
+                                images_to_log.append(wandb.Image(fmap))
+                                
+                            wandb.log({f"feature_maps/{name}": images_to_log})
+                
                 loss = self.criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
@@ -154,34 +228,10 @@ class AECTrainer:
             self.scheduler.step(val_loss)
 
         print(f"Best Validation Loss: {best_val_loss:.4f}")
-
-    def evaluate(self) -> Tuple[float, float]:
-        """
-        Evaluates the model on the validation set.
-
-        Returns:
-            float: The validation loss.
-        """
-        self.model.eval()
-        correct = 0
-        total = 0
-        val_loss = 0.0
-
-        with torch.no_grad():
-            for images, labels in self.val_loader:
-                images, labels = images.to(self.device), labels.to(self.device)
-                outputs = self.model(images)
-                loss = self.criterion(outputs, labels)
-
-                val_loss += loss.item()
-                _, predicted = torch.max(outputs, 1)
-                correct += (predicted == labels).sum().item()
-                total += labels.size(0)
-
-        val_acc = correct / total
-        val_loss = val_loss / len(self.val_loader)
-        print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_acc:.4f}")
-        return val_loss, val_acc
+        
+        # Clean up hooks to prevent memory leaks
+        for hook in self.activation_hooks:
+            hook.remove()
 
 def run_training() -> None:
     """
@@ -195,7 +245,7 @@ def run_training() -> None:
         "latent_dim": 200,
         "pretrained_model_path": "path/to/your/pretrained/model",  # specify the path
         "optimizer": "Adam",
-        "log_images_every": 5,
+        "log_images_every": 50,
         "timestamp": timestamp,
         "weight_decay": 1e-4,
         "pdrop_2d": 0.3,
@@ -203,6 +253,3 @@ def run_training() -> None:
     })
     trainer = AECTrainer(config=wandb.config)
     trainer.train()
-
-if __name__ == "__main__":
-    run_training()

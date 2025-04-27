@@ -18,8 +18,8 @@ class AEC(nn.Module):
                  input_channels: int = 3, 
                  latent_dim: int = 200, 
                  out_channels: int = 16, 
-                 pdrop_2d: int = 0.3,
-                 pdrop_1d: int = 0.5,
+                 pdrop_2d: float = 0.3,
+                 pdrop_1d: float = 0.5,
                  num_classes: int = 10) -> None:
         super(AEC, self).__init__()
 
@@ -64,7 +64,7 @@ class AEC(nn.Module):
         """
         encoded = self.encoder(x)  # Output of encoder (latent space)
         logits = self.classifier(encoded)  # Classifier output
-        return logits
+        return logits, encoded
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
