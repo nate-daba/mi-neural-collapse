@@ -189,3 +189,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+# run this:
+# python3 scripts/encode_CIFAR10.py --ae_checkpoint checkpoints/2025-04-14-13-08-30/2025-04-14-13-30-44-val-loss-0.01/checkpoint_val_loss_0.01.ckpt --aec_checkpoint checkpoints/2025-04-22-12-02-45/2025-04-22-13-04-16-val-loss-0.738567/checkpoint_val_loss_0.738567.ckpt
