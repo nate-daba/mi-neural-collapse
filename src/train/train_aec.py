@@ -14,7 +14,8 @@ import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from src.models.aec import AEC  # Update this import based on where you saved the AEC class
-from src.utils.utils import save_checkpoint
+from src.utils.utils import save_checkpoint, get_pmf_table, plot_pmf_table
+from src.mi.discrete_mi import compute_mi
 
 class AECTrainer:
     """
@@ -50,6 +51,13 @@ class AECTrainer:
         # Loading CIFAR-10 validation data
         val_dataset = datasets.CIFAR10(root="./data", train=False, download=True, transform=transform)
         self.val_loader = DataLoader(val_dataset, batch_size=self.config.batch_size, shuffle=False)
+        
+        # Loading the nn pairs for the test-train pairs
+        nn_pairs = torch.load(self.config.nn_pairs_path, weights_only=False)
+        self.nn_pairs = nn_pairs
+        
+        self.class_names = train_dataset.classes
+        self.num_classes = len(self.class_names)
     
     def load_pretrained_encoder(self):
         checkpoint = torch.load(self.config.pretrained_model_path, map_location=self.device)
@@ -157,7 +165,7 @@ class AECTrainer:
                 outputs, encoded = self.model(images)
                 
                 # Log activations (you already have 'encoded' for the latent space)
-                wandb.log({"penultimate_activations": wandb.Histogram(encoded.cpu().numpy())})
+                wandb.log({"penultimate_activations": wandb.Histogram(encoded.detach().cpu().numpy())})
                 
                 # Log a sample of other tracked activations (periodically to avoid overhead)
                 if i % 100 == 0:  # Adjust frequency as needed
@@ -197,8 +205,12 @@ class AECTrainer:
             print(f"Epoch [{epoch + 1}/{self.config.epochs}], Training Loss: {train_loss:.4f}, Accuracy: {train_acc:.4f}")
 
             # Compute validation loss
-            val_loss, val_acc = self.evaluate()
-
+            val_loss, val_acc, mi, pmf_table = self.evaluate()
+            
+            # Log PMF table
+            fig = plot_pmf_table(pmf_table, self.class_names)
+            wandb.log({"pmf_table": wandb.Image(fig)})
+            
             # Log to wandb
             wandb.log({
                 "epoch": epoch + 1,
@@ -206,7 +218,8 @@ class AECTrainer:
                 "train_accuracy": train_acc,
                 "val_loss": val_loss,
                 "val_acc": val_acc,
-                "lr": self.optimizer.param_groups[0]["lr"]
+                "lr": self.optimizer.param_groups[0]["lr"],
+                "mutual_information": mi,
             })
 
             # Save checkpoint if validation loss improves
@@ -232,6 +245,40 @@ class AECTrainer:
         # Clean up hooks to prevent memory leaks
         for hook in self.activation_hooks:
             hook.remove()
+    
+    def evaluate(self) -> Tuple[float, float]:
+        """
+        Evaluates the model on the validation set.
+
+        Returns:
+            float: The validation loss.
+            float: The validation accuracy.
+        """
+        self.model.eval()
+        correct = 0
+        total = 0
+        val_loss = 0.0
+
+        with torch.no_grad():
+            for images, labels in self.val_loader:
+                images, labels = images.to(self.device), labels.to(self.device)
+                outputs, _ = self.model(images)
+                loss = self.criterion(outputs, labels)
+
+                val_loss += loss.item()
+                _, predicted = torch.max(outputs, 1)
+                correct += (predicted == labels).sum().item()
+                total += labels.size(0)
+
+        val_acc = correct / total
+        val_loss = val_loss / len(self.val_loader)
+        
+        # Compute and log mutual information
+        pmf_table = get_pmf_table(self.model, self.nn_pairs, self.device, len(self.nn_pairs))
+        mi = compute_mi(pmf_table)
+        
+        print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_acc:.4f}, MI: {mi:.4f} nats")
+        return val_loss, val_acc, mi, pmf_table
 
 def run_training() -> None:
     """
@@ -249,7 +296,12 @@ def run_training() -> None:
         "timestamp": timestamp,
         "weight_decay": 1e-4,
         "pdrop_2d": 0.3,
-        "pdrop_1d": 0.5
+        "pdrop_1d": 0.5,
+        "nn_pairs_path": "data/nn_pairs/class_constrained_nn_pairs.pt"  # specify the path
     })
     trainer = AECTrainer(config=wandb.config)
     trainer.train()
+    
+if __name__ == "__main__":
+    run_training()
+    wandb.finish()

@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
+from scipy.optimize import linear_sum_assignment
 from tqdm import tqdm
 import clip  # pip install clip
 import torchvision.utils as vutils
@@ -254,7 +255,163 @@ def visualize_nearest_neighbors(test_dataset, train_dataset, selected_indices, n
         
         assert test_label == nn_label, "Class constraint violation!"
         print(f"✓ Test: {class_names[test_label]} → NN: {class_names[nn_label]} (similarity: {similarity:.3f})")
-
+        
+def save_class_constrained_nn_pairs(test_dataset, train_dataset, output_dir, num_samples_per_class=1000):
+    """
+    For each class, find and save nearest neighbors in training set for test samples.
+    Ensures one-to-one mapping between test and training images.
+    
+    Args:
+        test_dataset: The test dataset
+        train_dataset: The training dataset
+        output_dir: Directory to save the results
+        num_samples_per_class: Max number of test samples to use per class
+    
+    Returns:
+        dict: Dictionary containing the pairs of test and nearest neighbor images
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Set device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
+    # Initialize the matcher
+    matcher = ClassConstrainedMatcher(device)
+    
+    # Fit on training data
+    matcher.fit(train_dataset)
+    
+    # Group test dataset indices by class
+    test_indices_by_class = {}
+    for i, (_, label) in enumerate(test_dataset):
+        if label not in test_indices_by_class:
+            test_indices_by_class[label] = []
+        test_indices_by_class[label].append(i)
+    
+    # Dictionary to store results
+    nn_pairs_by_class = {}
+    
+    # Process each class
+    for class_idx, indices in test_indices_by_class.items():
+        print(f"Processing class {class_idx} ({len(indices)} test samples)...")
+        
+        # Limit number of samples if needed
+        selected_indices = indices[:num_samples_per_class]
+        
+        # Get class data from matcher
+        class_data = matcher.nearest_neighbors_by_class.get(class_idx)
+        if not class_data:
+            print(f"Warning: No training data for class {class_idx}")
+            continue
+            
+        # Extract embeddings for test samples
+        test_embeddings = []
+        for test_idx in selected_indices:
+            test_image, _ = test_dataset[test_idx]
+            test_image = test_image.unsqueeze(0).to(device)  # Add batch dimension
+            
+            # Convert from [-1, 1] to [0, 1] range if necessary
+            if test_image.min() < 0:
+                test_image = (test_image + 1) / 2
+            
+            # Resize to 224x224 for CLIP
+            resize_transform = transforms.Resize(224)
+            test_image = resize_transform(test_image)
+            
+            # Encode the test image
+            with torch.no_grad():
+                test_embedding = matcher.model.encode_image(test_image)
+                test_embedding = test_embedding / test_embedding.norm(dim=1, keepdim=True)
+                test_embedding = test_embedding.cpu().numpy()
+            
+            test_embeddings.append(test_embedding[0])
+        
+        # Convert to numpy array
+        test_embeddings = np.array(test_embeddings)
+        
+        # Get all training embeddings for this class
+        train_embeddings = class_data['embeddings']
+        train_indices = class_data['indices']
+        
+        # Check if we have enough training samples
+        if len(train_indices) < len(selected_indices):
+            print(f"Warning: Class {class_idx} has only {len(train_indices)} training samples, but {len(selected_indices)} test samples requested")
+            # Limit test samples to match available training samples
+            selected_indices = selected_indices[:len(train_indices)]
+            test_embeddings = test_embeddings[:len(train_indices)]
+        
+        # Compute pairwise distances between all test and training embeddings
+        # Using cosine distance: 1 - cosine similarity
+        distances = 1 - np.dot(test_embeddings, train_embeddings.T)
+        
+        # Use the Hungarian algorithm (linear assignment) to find the optimal one-to-one matching
+        # that minimizes the total distance
+        test_indices, train_assignment = linear_sum_assignment(distances)
+        
+        # Initialize arrays to store image pairs
+        pairs = []
+        similarities = []
+        assigned_train_indices = []
+        
+        # Collect pairs of test and nearest neighbor images
+        for i, train_idx in zip(test_indices, train_assignment):
+            test_idx = selected_indices[i]
+            train_global_idx = train_indices[train_idx]
+            
+            test_image = test_dataset[test_idx][0].unsqueeze(0)  # Shape: (1, 3, 32, 32)
+            nn_image = train_dataset[train_global_idx][0].unsqueeze(0)  # Shape: (1, 3, 32, 32)
+            
+            # Stack test and nn images
+            pair = torch.cat([test_image, nn_image], dim=0)  # Shape: (2, 3, 32, 32)
+            pairs.append(pair)
+            
+            # Store similarity
+            similarity = 1 - distances[i, train_idx]
+            similarities.append(similarity)
+            
+            # Store assigned training index
+            assigned_train_indices.append(train_global_idx)
+        
+        # Convert list of tensors to single tensor
+        if pairs:
+            pairs_tensor = torch.stack(pairs)  # Shape: (N, 2, 3, 32, 32)
+            similarities_array = np.array(similarities)
+            
+            # Store in dictionary
+            nn_pairs_by_class[class_idx] = {
+                'pairs': pairs_tensor,
+                'similarities': similarities_array,
+                'test_indices': [selected_indices[i] for i in test_indices],
+                'nn_indices': assigned_train_indices
+            }
+    
+    # Save the results
+    save_path = os.path.join(output_dir, "class_constrained_nn_pairs.pt")
+    torch.save(nn_pairs_by_class, save_path)
+    print(f"Saved nearest neighbor pairs to {save_path}")
+    
+    # Also save a smaller visualization sample
+    visualize_sample = {}
+    for class_idx, data in nn_pairs_by_class.items():
+        # Take a small sample of pairs for visualization
+        sample_size = min(5, len(data['pairs']))
+        indices = np.random.choice(len(data['pairs']), sample_size, replace=False)
+        
+        visualize_sample[class_idx] = {
+            'pairs': data['pairs'][indices],
+            'similarities': data['similarities'][indices],
+            'test_indices': [data['test_indices'][i] for i in indices],
+            'nn_indices': [data['nn_indices'][i] for i in indices]
+        }
+    
+    # Save the visualization sample
+    vis_path = os.path.join(output_dir, "visualization_sample.pt")
+    torch.save(visualize_sample, vis_path)
+    print(f"Saved visualization sample to {vis_path}")
+    
+    return nn_pairs_by_class
 
 if __name__ == "__main__":
     # Set device
@@ -271,12 +428,21 @@ if __name__ == "__main__":
     train_dataset = datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
     test_dataset = datasets.CIFAR10(root="./data", train=False, download=True, transform=transform)
     
-    # Initialize the matcher
-    matcher = ClassConstrainedMatcher(device)
+    # Create output directory
+    output_dir = "results/class_constrained_nn_plots/"
     
-    # Fit on training data
-    matcher.fit(train_dataset)
+    paired_data_output_dir = "data/nn_pairs/"
+    os.makedirs(paired_data_output_dir, exist_ok=True)
     
+    # Save nearest neighbor pairs for all classes
+    nn_pairs = save_class_constrained_nn_pairs(
+        test_dataset=test_dataset,
+        train_dataset=train_dataset,
+        output_dir=paired_data_output_dir,
+        num_samples_per_class=1000  # Adjust based on your needs and memory constraints
+    )
+    
+    # For demonstration, also run the visualization on a small sample
     # Randomly select one image per class from test set
     selected_indices = []
     for class_idx in range(10):
@@ -284,9 +450,12 @@ if __name__ == "__main__":
         selected_idx = np.random.choice(class_images)
         selected_indices.append(selected_idx)
     
+    # Initialize the matcher for visualization
+    matcher = ClassConstrainedMatcher(device)
+    matcher.fit(train_dataset)
+    
     # Find nearest neighbors with class constraint
     nearest_indices, distances = matcher.find_nearest_neighbors(test_dataset, selected_indices)
     
     # Visualize results
-    output_dir = "results/class_constrained_nn_plots/"
     visualize_nearest_neighbors(test_dataset, train_dataset, selected_indices, nearest_indices, distances, output_dir)
