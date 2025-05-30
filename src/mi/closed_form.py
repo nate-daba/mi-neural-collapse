@@ -127,7 +127,7 @@ class GaussianMI:
         # if det_joint <= 0 or det_x <= 0 or det_y <= 0:
         #     raise ValueError("Invalid determinant value; covariance matrices may be singular.")
 
-        mi = 0.5 * np.log(det_x * det_y / det_joint)
+        mi = 0.5 * np.log2(det_x * det_y / det_joint)
         
         # sign_joint, logdet_joint = np.linalg.slogdet(cov_joint)
         # sign_x, logdet_x = np.linalg.slogdet(cov_x)
