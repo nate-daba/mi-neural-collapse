@@ -27,7 +27,7 @@ def compute_mi(joint_pmf) -> float:
     ratio = joint_pmf / (p_x * p_y)
     # Replace zeros to avoid log(0)
     ratio = torch.where(joint_pmf > 0, ratio, torch.ones_like(ratio))
-    mi_matrix = joint_pmf * torch.log(ratio)
+    mi_matrix = joint_pmf * torch.log2(ratio)
     mi_matrix = torch.where(torch.isfinite(mi_matrix), mi_matrix, torch.zeros_like(mi_matrix))
     
     return torch.sum(mi_matrix).item()
