@@ -62,7 +62,7 @@ class AEC(nn.Module):
         Returns:
             torch.Tensor: Logits of shape (batch_size, num_classes).
         """
-        encoded = self.encoder(x)  # Output of encoder (latent space)
+        encoded = self.encode(x)  # Output of encoder (latent space)
         logits = self.classifier(encoded)  # Classifier output
         return logits, encoded
 
