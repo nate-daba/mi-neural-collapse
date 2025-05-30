@@ -72,8 +72,8 @@ def get_nn_pair_predictions(nn_pairs_by_class, model, device):
 
     with torch.no_grad():
         for class_idx, data in nn_pairs_by_class.items():
-            test_preds = []
-            train_preds = []
+            test_preds, test_feats = [], []
+            train_preds, train_feats = [], []
 
             # Iterate over each pair of test and train images
             pairs = data['pairs']  # Get the pairs of test and train indices
@@ -86,17 +86,21 @@ def get_nn_pair_predictions(nn_pairs_by_class, model, device):
                 test_img = test_img.unsqueeze(0).to(device)  # Add batch dimension
                 train_img = train_img.unsqueeze(0).to(device)  # Add batch dimension
 
-                test_pred = model(test_img)[0]  # Model output for test image
-                train_pred = model(train_img)[0]  # Model output for train image
+                test_pred, test_feat = model(test_img)  # Model output for test image
+                train_pred, train_feat = model(train_img)  # Model output for train image
 
                 _, test_class = torch.max(test_pred, dim=1)
                 _, train_class = torch.max(train_pred, dim=1)
 
                 test_preds.append(test_class.item())
                 train_preds.append(train_class.item())
+                
+                test_feats.append(test_feat.cpu().numpy())
+                train_feats.append(train_feat.cpu().numpy())
 
-            predictions[class_idx] = {'test_preds': test_preds, 'train_preds': train_preds}
-    
+            predictions[class_idx] = {'test_preds': test_preds, 'train_preds': train_preds,
+                                       'test_feats': test_feats, 'train_feats': train_feats}
+
     return predictions
 
 def build_pmf_table(predictions, num_classes):
@@ -127,22 +131,17 @@ def build_pmf_table(predictions, num_classes):
 
     return pmf_table
 
-def get_pmf_table(model, nn_pairs, device, num_classes):
+def get_pmf_table(predictions, num_classes):
     """
     Update the PMF table after each epoch.
 
     Args:
-        model: The trained model.
-        nn_pairs (dict): Dictionary containing the nearest neighbor pairs for each class.
-        device: The device (CPU/GPU) to run the model on.
+        predictions (dict): A dictionary containing the predictions for test and train images in the pairs.
         num_classes (int): The number of classes in the classification task.
 
     Returns:
         torch.Tensor: The PMF table.
     """
-
-    # Get predictions for the test and train images in the pairs
-    predictions = get_nn_pair_predictions(nn_pairs, model, device)
 
     # Build the PMF table using the predictions
     pmf_table = build_pmf_table(predictions, num_classes)

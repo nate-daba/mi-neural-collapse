@@ -14,8 +14,9 @@ import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from src.models.aec import AEC  # Update this import based on where you saved the AEC class
-from src.utils.utils import save_checkpoint, get_pmf_table, plot_pmf_table
+from src.utils.utils import save_checkpoint, get_pmf_table, plot_pmf_table, get_nn_pair_predictions
 from src.mi.discrete_mi import compute_mi
+from src.mi.latent_mi import compute_latent_mi
 
 class AECTrainer:
     """
@@ -205,8 +206,8 @@ class AECTrainer:
             print(f"Epoch [{epoch + 1}/{self.config.epochs}], Training Loss: {train_loss:.4f}, Accuracy: {train_acc:.4f}")
 
             # Compute validation loss
-            val_loss, val_acc, mi, pmf_table = self.evaluate()
-            
+            val_loss, val_acc, mi, latent_mi, pmf_table = self.evaluate()
+
             # Log PMF table
             fig = plot_pmf_table(pmf_table, self.class_names)
             wandb.log({"pmf_table": wandb.Image(fig)})
@@ -220,6 +221,7 @@ class AECTrainer:
                 "val_acc": val_acc,
                 "lr": self.optimizer.param_groups[0]["lr"],
                 "mutual_information": mi,
+                "latent_mutual_information": latent_mi,
             })
 
             # Save checkpoint if validation loss improves
@@ -273,12 +275,18 @@ class AECTrainer:
         val_acc = correct / total
         val_loss = val_loss / len(self.val_loader)
         
-        # Compute and log mutual information
-        pmf_table = get_pmf_table(self.model, self.nn_pairs, self.device, len(self.nn_pairs))
+        # Get predictions for the nearest neighbor pairs
+        predictions = get_nn_pair_predictions(self.nn_pairs, self.model, self.device)
+        # Compute and log mutual information b/n discrete classificaiton vectors of test-train pairs
+        pmf_table = get_pmf_table(predictions, len(self.nn_pairs))
         mi = compute_mi(pmf_table)
-        
-        print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_acc:.4f}, MI: {mi:.4f} nats")
-        return val_loss, val_acc, mi, pmf_table
+        # Compute and log mutal information b/n continuous latent features of test-train pairs
+        latent_mi = compute_latent_mi(predictions,
+                              latent_dim=self.config.lmi_dim,
+                              estimate_on_val=self.config.estimate_on_val)
+
+        print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_acc:.4f}, MI: {mi:.4f} bits, Latent MI: {latent_mi:.4f} bits")
+        return val_loss, val_acc, mi, latent_mi, pmf_table
 
 def run_training() -> None:
     """
@@ -289,7 +297,8 @@ def run_training() -> None:
         "epochs": 200,
         "batch_size": 64,
         "learning_rate": 1e-3,
-        "latent_dim": 200,
+        "ae_latent_dim": 200,
+        "lmi_dim": 64,
         "pretrained_model_path": "path/to/your/pretrained/model",  # specify the path
         "optimizer": "Adam",
         "log_images_every": 50,
@@ -297,7 +306,8 @@ def run_training() -> None:
         "weight_decay": 1e-4,
         "pdrop_2d": 0.3,
         "pdrop_1d": 0.5,
-        "nn_pairs_path": "data/nn_pairs/class_constrained_nn_pairs.pt"  # specify the path
+        "nn_pairs_path": "data/nn_pairs/class_constrained_nn_pairs.pt",  # specify the path
+        "estimate_on_val": False  # Set to True if you want to estimate MI on validation set
     })
     trainer = AECTrainer(config=wandb.config)
     trainer.train()
