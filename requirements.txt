@@ -2,6 +2,7 @@ numpy
 scipy
 scikit-learn
 pandas
+seaborn
 matplotlib
 tqdm
 notebook
@@ -12,3 +13,4 @@ torchinfo
 wandb
 statsmodels
 git+https://github.com/openai/CLIP.git
+latentmi
