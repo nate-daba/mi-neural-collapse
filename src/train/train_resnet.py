@@ -202,6 +202,21 @@ class ResNetTrainer:
                 outputs, features = self.model(images)
                 loss = self.criterion(outputs, labels)
                 loss.backward()
+                
+                # Log gradient norm before clipping (optional)
+                if i % 100 == 0:
+                    total_norm = 0
+                    for p in self.model.parameters():
+                        if p.grad is not None:
+                            param_norm = p.grad.data.norm(2)
+                            total_norm += param_norm.item() ** 2
+                    total_norm = total_norm ** (1. / 2)
+                    wandb.log({"gradient_norm_before_clip": total_norm})
+                    
+                # Gradient clipping
+                if self.config.gradient_clip_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.gradient_clip_norm)
+                    
                 self.optimizer.step()
 
                 running_loss += loss.item()
@@ -364,6 +379,7 @@ def run_training() -> None:
         "nn_pairs_path": "data/nn_pairs/class_constrained_nn_pairs.pt",
         "estimate_on_val": False,  # LMI estimation setting
         "mi_eval_freq": 1,  # Evaluate MI every 5 epochs to save computation
+        "gradient_clip_norm": 1.0,  # Gradient clipping norm
     }
     
     wandb.init(
