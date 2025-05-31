@@ -32,8 +32,14 @@ def compute_latent_mi(predictions: Dict[int, Dict[str, list]],
     Ys = np.stack(Ys)
 
     # Estimate MI
+    print(f"[INFO] Estimating latent MI with {Xs.shape[0]} samples and {latent_dim} latent dimensions.")
+    if estimate_on_val:
+        print("[INFO] Using validation set for estimation.")
+    else:
+        print("[INFO] Using training set for estimation.")
     pmis, _, _ = lmi.estimate(Xs, Ys, 
                               N_dims=latent_dim, 
                               estimate_on_val=estimate_on_val, 
                               quiet=True)
+    print("\n")
     return np.nanmean(pmis)
