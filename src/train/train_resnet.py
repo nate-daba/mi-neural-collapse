@@ -370,7 +370,7 @@ def run_training() -> None:
         "lr_decay": 0.1,  # Decay factor
         "momentum": 0.9,  # SGD momentum
         "weight_decay": 5e-4,  # Weight decay
-        "lmi_dim": 64,  # Latent MI dimension
+        "lmi_dim": 16,  # Latent MI dimension
         "optimizer": "SGD",
         "model": "ResNet-18",
         "dataset": "CIFAR-10",
