@@ -34,106 +34,6 @@ except ImportError as e:
     print(f"Warning: Could not import some modules: {e}")
     print("Make sure all required modules are available in the Python path")
 
-
-def safe_close_figure(fig: Any) -> None:
-    """
-    Safely close a matplotlib figure with proper type checking.
-    
-    Args:
-        fig: Figure object to close (or other object)
-    """
-    try:
-        if fig is None:
-            return
-        
-        # Check if it's a matplotlib Figure
-        if isinstance(fig, matplotlib.figure.Figure):
-            plt.close(fig)
-        elif hasattr(fig, 'savefig'):  # Duck typing for Figure-like objects
-            plt.close(fig)
-        elif isinstance(fig, int):  # Figure number
-            plt.close(fig)
-        elif isinstance(fig, str):  # Figure name
-            plt.close(fig)
-        else:
-            # If we're not sure what it is, try to close all figures
-            print(f"Warning: Unexpected figure type {type(fig)}, closing all figures")
-            plt.close('all')
-            
-    except Exception as e:
-        print(f"Warning: Error closing figure: {e}")
-        # Last resort - close all figures
-        try:
-            plt.close('all')
-        except:
-            pass
-
-
-def safe_plot_pmf_table(pmf_table, class_names, title="PMF Table"):
-    """
-    Safely plot PMF table with proper figure management.
-    
-    Args:
-        pmf_table: PMF table as numpy array
-        class_names: List of class names for labeling
-        title: Plot title
-        
-    Returns:
-        matplotlib Figure object
-    """
-    try:
-        # Try to use the original plot_pmf_table function first
-        fig = plot_pmf_table(pmf_table, class_names)
-        
-        # Validate that we got a proper Figure object
-        if isinstance(fig, matplotlib.figure.Figure) or hasattr(fig, 'savefig'):
-            return fig
-        else:
-            print(f"Original plot_pmf_table returned unexpected type: {type(fig)}")
-            raise ValueError("Invalid figure type returned")
-            
-    except Exception as e:
-        print(f"Original plot_pmf_table failed: {e}")
-        print("Falling back to safe plotting function")
-        
-        # Fallback: create a simple heatmap
-        try:
-            import seaborn as sns
-            import numpy as np
-            
-            fig, ax = plt.subplots(figsize=(10, 8))
-            
-            sns.heatmap(
-                pmf_table,
-                annot=True,
-                fmt='.3f',
-                cmap='Blues',
-                xticklabels=class_names,
-                yticklabels=class_names,
-                ax=ax,
-                cbar_kws={'label': 'Probability'}
-            )
-            
-            ax.set_xlabel('Test Predictions')
-            ax.set_ylabel('Train Predictions')
-            ax.set_title(title)
-            
-            plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
-            plt.setp(ax.get_yticklabels(), rotation=0)
-            fig.tight_layout()
-            
-            return fig
-            
-        except Exception as fallback_e:
-            print(f"Fallback plotting also failed: {fallback_e}")
-            # Create a minimal error plot
-            fig, ax = plt.subplots(figsize=(6, 4))
-            ax.text(0.5, 0.5, f"PMF Plot Error:\n{str(e)}", 
-                    transform=ax.transAxes, ha='center', va='center')
-            ax.set_title("PMF Plot - Error Occurred")
-            return fig
-
-
 class ResNetWithFeatures(nn.Module):
     """
     ResNet wrapper that returns both logits and penultimate layer features.
@@ -552,25 +452,21 @@ class ResNetTrainer:
                 comprehensive_metrics = self.compute_metrics()
                 current_metrics.update(comprehensive_metrics)
 
-                # Plot and log PMF table if MI metrics are available
                 if 'discrete_mutual_information' in comprehensive_metrics and self.nn_pairs is not None:
                     try:
-                        from src.utils.utils import get_nn_pair_predictions, get_pmf_table
+                        from src.utils.utils import get_nn_pair_predictions, get_pmf_table, plot_pmf_table
                         predictions = get_nn_pair_predictions(self.nn_pairs, self.model, self.device)
                         pmf_table = get_pmf_table(predictions, len(self.nn_pairs))
+                        fig = plot_pmf_table(pmf_table, self.class_names)
                         
-                        # Use safe plotting function
-                        fig = safe_plot_pmf_table(pmf_table, self.class_names)
-                        
-                        if self.config.get('use_wandb', True) and fig is not None:
+                        if self.config.get('use_wandb', True):
                             wandb.log({"pmf_table": wandb.Image(fig)})
                         
-                        # Safe figure closing
-                        safe_close_figure(fig)
+                        # FIXED: Don't try to close fig directly, just close all figures
+                        plt.close('all')
                         
                     except Exception as e:
                         print(f"Warning: Could not plot PMF table: {e}")
-                        # Ensure we close any potentially open figures
                         plt.close('all')
             
             # Logging
