@@ -1,3 +1,4 @@
+# Core scientific computing
 numpy
 scipy
 scikit-learn
@@ -6,12 +7,25 @@ seaborn
 matplotlib
 tqdm
 notebook
-torch
-torchvision
 typing-extensions
+statsmodels
+
+# PyTorch (adjust URL based on your CUDA version)
+# For CUDA 11.8:
+torch --index-url https://download.pytorch.org/whl/cu118
+torchvision --index-url https://download.pytorch.org/whl/cu118
+torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# For CPU only, use:
+# torch --index-url https://download.pytorch.org/whl/cpu
+# torchvision --index-url https://download.pytorch.org/whl/cpu
+# torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# ML utilities
 torchinfo
 wandb
-statsmodels
+
+# External repositories
 git+https://github.com/openai/CLIP.git
 git+https://github.com/rhubarbwu/neural-collapse.git
 latentmi
